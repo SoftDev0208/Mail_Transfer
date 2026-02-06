@@ -27,38 +27,10 @@ const db = new sqlite3.Database(path.resolve(__dirname, sqlitePath));
 
 // ---- helpers ----
 function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 function uniqCid() {
-    return crypto.randomBytes(10).toString("hex") + "@inline";
-}
-function convertDataUriImagesToCid(html) {
-    const dom = new JSDOM(`<body>${html}</body>`);
-    const doc = dom.window.document;
-
-    const attachments = [];
-    for (const img of Array.from(doc.querySelectorAll("img"))) {
-        const src = img.getAttribute("src") || "";
-        if (!src.startsWith("data:image/")) continue;
-
-        const match = src.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-        if (!match) continue;
-
-        const mime = match[1];
-        const b64 = match[2];
-        const buf = Buffer.from(b64, "base64");
-
-        const cid = uniqCid();
-        attachments.push({
-            filename: `inline.${mime.split("/")[1] || "png"}`,
-            content: buf,
-            contentType: mime,
-            cid,
-        });
-
-        img.setAttribute("src", `cid:${cid}`);
-    }
-    return { html: doc.body.innerHTML, attachments };
+  return crypto.randomBytes(10).toString("hex") + "@inline";
 }
 
 const upload = multer({
@@ -79,14 +51,14 @@ const upload = multer({
 // });
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: 'kamosmbatyan0729@gmail.com',       // Replace with your Gmail
-        pass: 'pdpi rhuc clzl qcxg',         // Use App Password if 2FA enabled
-    },
-    tls: {
-        rejectUnauthorized: false // allows self-signed certs
-    }
+  service: 'gmail',
+  auth: {
+    user: 'kamosmbatyan0729@gmail.com',       // Replace with your Gmail
+    pass: 'pdpi rhuc clzl qcxg',         // Use App Password if 2FA enabled
+  },
+  tls: {
+    rejectUnauthorized: false // allows self-signed certs
+  }
 });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -105,15 +77,15 @@ const RECIPIENTS_QUERY = `
 
 // List recipients (optional endpoint for UI)
 app.get("/api/recipients", (req, res) => {
-    db.all(RECIPIENTS_QUERY, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });
+  db.all(RECIPIENTS_QUERY, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });
 
-        const recipients = Array.from(
-            new Set((rows || []).map(r => String(r.addr || "").trim()).filter(isValidEmail))
-        );
+    const recipients = Array.from(
+      new Set((rows || []).map(r => String(r.addr || "").trim()).filter(isValidEmail))
+    );
 
-        res.json({ ok: true, recipients });
-    });
+    res.json({ ok: true, recipients });
+  });
 });
 
 // Send email to everyone in table `email`
@@ -143,19 +115,22 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
         return res.status(400).json({ error: "No valid emails found in database." });
       }
 
-      // Convert inline base64 <img src="data:image/..."> to CID attachments (better inbox rendering)
-      const converted = convertDataUriImagesToCid(rawHtml);
+      const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
+      const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
 
-      const from = `"${process.env.FROM_NAME || "Mailer"}" <${process.env.SMTP_USER}>`;
+      if (!fromEmail || !isValidEmail(fromEmail)) {
+        return res.status(400).json({ error: "Valid fromEmail is required." });
+      }
+
+      const from = `"${fromName}" <${fromEmail}>`;
 
       if (mode === "bcc") {
         const info = await transporter.sendMail({
           from,
-          to: process.env.SMTP_USER,
+          to: from,
           bcc: recipients,
           subject,
-          html: converted.html,
-          attachments: converted.attachments,
+          rawHtml,
         });
 
         return res.json({
@@ -172,10 +147,9 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
         try {
           const info = await transporter.sendMail({
             from,
-            to,
+            to: from,
             subject,
-            html: converted.html,
-            attachments: converted.attachments,
+            rawHtml,
           });
           await sleep(2000);
           results.push({ to, ok: true, messageId: info.messageId });
@@ -207,15 +181,20 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
       return res.status(400).json({ error: "HTML file looks empty." });
     }
 
-    const converted = convertDataUriImagesToCid(rawHtml);
+    const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
+    const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
 
-    const from = `"${process.env.FROM_NAME || "Mailer"}" <${process.env.SMTP_USER}>`;
+    if (!fromEmail || !isValidEmail(fromEmail)) {
+      return res.status(400).json({ error: "Valid fromEmail is required." });
+    }
+
+    const from = `"${fromName}" <${fromEmail}>`;
 
     const info = await transporter.sendMail({
       from,
-      to,
+      to: fromEmail,
       subject,
-      html: converted.html,
+      rawHtml,
       attachments: converted.attachments,
     });
 
