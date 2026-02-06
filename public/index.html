@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Send HTML Template</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:system-ui;max-width:980px;margin:30px auto;padding:0 16px}
+    input,select,button{width:100%;padding:10px;margin:8px 0;font-size:16px}
+    button{cursor:pointer}
+    .status{white-space:pre-wrap;margin-top:12px}
+    table{width:100%;border-collapse:collapse;margin-top:14px}
+    th,td{border:1px solid #ddd;padding:10px;text-align:left;font-size:14px}
+    th{background:#f6f6f6}
+    .ok{color:green;font-weight:600}
+    .bad{color:#b00020;font-weight:600}
+    .btnSmall{width:auto;padding:6px 10px;font-size:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{border:1px solid #ddd;border-radius:10px;padding:14px}
+  </style>
+</head>
+<body>
+  <h1>Send Email from HTML file</h1>
+
+  <div class="row">
+    <div class="card">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="individual" selected>Individual (recommended, shows per-email status)</option>
+        <option value="bcc">BCC (single email, cannot show per-recipient status)</option>
+      </select>
+
+      <label>Subject</label>
+      <input id="subject" placeholder="Subject..." />
+
+      <label>HTML file</label>
+      <input id="template" type="file" accept=".html,.htm,text/html" />
+
+      <button id="sendBtn">Send</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card">
+      <h3>Sent Status</h3>
+      <div class="status" id="summary">No sends yet.</div>
+
+      <table id="resultsTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const summaryEl = document.getElementById("summary");
+    const tableEl = document.getElementById("resultsTable");
+    const bodyEl = document.getElementById("resultsBody");
+
+    function getFormData() {
+      const subject = document.getElementById("subject").value.trim();
+      const mode = document.getElementById("mode").value;
+      const file = document.getElementById("template").files[0];
+      return { subject, mode, file };
+    }
+
+    function renderResults(results, subject) {
+      bodyEl.innerHTML = "";
+
+      tableEl.style.display = "table";
+      for (const r of results) {
+        const tr = document.createElement("tr");
+
+        const tdEmail = document.createElement("td");
+        tdEmail.textContent = r.to;
+
+        const tdStatus = document.createElement("td");
+        tdStatus.innerHTML = r.ok
+          ? `<span class="ok">SENT</span>`
+          : `<span class="bad">FAILED</span>` + (r.error ? ` — ${r.error}` : "");
+
+        const tdAction = document.createElement("td");
+        if (r.ok) {
+          tdAction.textContent = "-";
+        } else {
+          const btn = document.createElement("button");
+          btn.className = "btnSmall";
+          btn.textContent = "Resend";
+          btn.onclick = () => resendOne(r.to, subject, tr);
+          tdAction.appendChild(btn);
+        }
+
+        tr.appendChild(tdEmail);
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdAction);
+        bodyEl.appendChild(tr);
+      }
+
+      const sent = results.filter(x => x.ok).length;
+      summaryEl.textContent = `Sent: ${sent}/${results.length}`;
+    }
+
+    async function resendOne(to, subject, rowEl) {
+      const { file } = getFormData();
+      if (!file) {
+        alert("Please keep the same HTML file selected to resend.");
+        return;
+      }
+
+      // show immediate UI feedback
+      const statusCell = rowEl.children[1];
+      const actionCell = rowEl.children[2];
+      statusCell.innerHTML = "Resending...";
+      actionCell.innerHTML = "";
+
+      const form = new FormData();
+      form.append("to", to);
+      form.append("subject", subject);
+      form.append("template", file);
+
+      try {
+        const res = await fetch("/api/send-one", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Resend failed");
+
+        statusCell.innerHTML = `<span class="ok">SENT</span>`;
+        actionCell.textContent = "-";
+      } catch (e) {
+        statusCell.innerHTML = `<span class="bad">FAILED</span> — ${e.message}`;
+        const btn = document.createElement("button");
+        btn.className = "btnSmall";
+        btn.textContent = "Resend";
+        btn.onclick = () => resendOne(to, subject, rowEl);
+        actionCell.appendChild(btn);
+      }
+    }
+
+    document.getElementById("sendBtn").onclick = async () => {
+      const { subject, mode, file } = getFormData();
+
+      if (!subject) { statusEl.textContent = "❌ Subject required."; return; }
+      if (!file) { statusEl.textContent = "❌ Please choose an HTML file."; return; }
+
+      const form = new FormData();
+      form.append("subject", subject);
+      form.append("mode", mode);
+      form.append("template", file);
+
+      statusEl.textContent = "Sending...";
+      summaryEl.textContent = "Waiting for results...";
+      tableEl.style.display = "none";
+      bodyEl.innerHTML = "";
+
+      const res = await fetch("/api/send", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!res.ok) {
+        statusEl.textContent = "❌ " + (data.error || "Send failed") + (data.details ? "\n" + data.details : "");
+        summaryEl.textContent = "No results.";
+        return;
+      }
+
+      statusEl.textContent = "✅ Send finished.";
+
+      if (data.mode === "bcc") {
+        summaryEl.textContent = `BCC sent to ${data.accepted} recipients. (No per-recipient status in BCC mode)`;
+        tableEl.style.display = "none";
+        return;
+      }
+
+      renderResults(data.results || [], subject);
+    };
+  </script>
+</body>
+</html>
