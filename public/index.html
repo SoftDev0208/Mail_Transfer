@@ -2,145 +2,38 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Send HTML Template</title>
+  <title>Bulk Email Sender</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-
   <style>
-    body {
-      font-family: system-ui;
-      max-width: 1100px;
-      margin: 30px auto;
-      padding: 0 16px;
-      background: #ffffff;
-    }
-
-    input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ddd;
-    }
-
-    button {
-      cursor: pointer;
-      background: #2563eb;
-      color: white;
-      font-weight: 600;
-      border: none;
-    }
-
-    button:hover {
-      opacity: 0.9;
-    }
-
-    .btnSmall {
-      width: auto;
-      padding: 6px 12px;
-      font-size: 14px;
-      border-radius: 6px;
-      background: #111827;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-
-    .btnSmall:hover {
-      opacity: 0.85;
-    }
-
-    .status {
-      white-space: pre-wrap;
-      margin-top: 12px;
-      font-size: 14px;
-      padding: 10px;
-      background: #f8fafc;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-    }
-
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 1.2fr;
-      gap: 18px;
-      align-items: start;
-    }
-
-    .card {
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 16px;
-      background: white;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 14px;
-    }
-
-    th, td {
-      border: 1px solid #ddd;
-      padding: 10px;
-      text-align: left;
-      font-size: 14px;
-    }
-
-    th {
-      background: #f1f5f9;
-    }
-
-    .ok {
-      color: green;
-      font-weight: 700;
-    }
-
-    .bad {
-      color: #b00020;
-      font-weight: 700;
-    }
-
-    .title {
-      font-size: 22px;
-      font-weight: 800;
-      margin-bottom: 10px;
-    }
-
-    label {
-      font-weight: 600;
-      display: block;
-      margin-top: 6px;
-    }
-
-    .hint {
-      font-size: 13px;
-      color: #475569;
-      margin-top: -4px;
-      margin-bottom: 10px;
-    }
+    body { font-family: system-ui; max-width: 1100px; margin: 30px auto; padding: 0 16px; }
+    .row { display:grid; grid-template-columns: 1fr 1.4fr; gap: 18px; align-items:start; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:16px; background:#fff; }
+    input, button { width:100%; padding:10px; margin:8px 0; font-size:16px; border-radius:8px; border:1px solid #ddd; }
+    button { cursor:pointer; background:#2563eb; color:#fff; font-weight:700; border:none; }
+    button:hover { opacity:0.9; }
+    .btnSmall { width:auto; padding:6px 10px; font-size:14px; border-radius:6px; background:#111827; }
+    .btnSmall:hover { opacity:0.85; }
+    .status { white-space:pre-wrap; padding:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th, td { border:1px solid #ddd; padding:10px; text-align:left; font-size:14px; }
+    th { background:#f1f5f9; }
+    .ok { color:green; font-weight:800; }
+    .bad { color:#b00020; font-weight:800; }
+    .muted { color:#64748b; font-size:13px; margin-top:-4px; }
+    label { font-weight:700; display:block; margin-top:6px; }
   </style>
 </head>
-
 <body>
-  <div class="title">📨 Bulk Email Sender (HTML Upload)</div>
+  <h1>📨 Bulk Email Sender (HTML Upload + DB Status)</h1>
 
   <div class="row">
-    <!-- LEFT SIDE -->
     <div class="card">
       <label>From Name</label>
       <input id="fromName" placeholder="ZAMA Support" value="ZAMA Support" />
-      <div class="hint">This is the display name shown in mailbox.</div>
 
       <label>From Email</label>
       <input id="fromEmail" type="email" placeholder="your@gmail.com" />
-      <div class="hint">Usually should match SMTP_USER (Gmail will enforce it).</div>
-
-      <label>Mode</label>
-      <select id="mode">
-        <option value="individual" selected>Individual (recommended, shows status)</option>
-        <option value="bcc">BCC (single email, no per-user status)</option>
-      </select>
+      <div class="muted">Tip: For Gmail, From Email should match SMTP_USER.</div>
 
       <label>Subject</label>
       <input id="subject" placeholder="Subject..." />
@@ -148,27 +41,30 @@
       <label>HTML file</label>
       <input id="template" type="file" accept=".html,.htm,text/html" />
 
-      <button id="sendBtn">Send Email</button>
+      <button id="sendBtn">Send to all (individual)</button>
 
       <div class="status" id="status">Ready.</div>
     </div>
 
-    <!-- RIGHT SIDE -->
     <div class="card">
-      <h3>📌 Sent Status</h3>
+      <div style="display:flex; gap:10px; align-items:center; justify-content:space-between;">
+        <h3 style="margin:0;">📌 Database Status</h3>
+        <button class="btnSmall" id="refreshBtn">Refresh</button>
+      </div>
 
-      <div class="status" id="summary">No sends yet.</div>
+      <div class="status" id="summary">Loading…</div>
 
-      <table id="resultsTable" style="display:none">
+      <table id="dbTable" style="display:none;">
         <thead>
           <tr>
             <th>Email</th>
-            <th>Status</th>
+            <th>Valid</th>
+            <th>Sent</th>
+            <th>Read</th>
             <th>Action</th>
           </tr>
         </thead>
-
-        <tbody id="resultsBody"></tbody>
+        <tbody id="dbBody"></tbody>
       </table>
     </div>
   </div>
@@ -176,167 +72,150 @@
   <script>
     const statusEl = document.getElementById("status");
     const summaryEl = document.getElementById("summary");
-    const tableEl = document.getElementById("resultsTable");
-    const bodyEl = document.getElementById("resultsBody");
+    const dbTable = document.getElementById("dbTable");
+    const dbBody = document.getElementById("dbBody");
 
-    function getFormValues() {
+    function vals() {
       return {
         fromName: document.getElementById("fromName").value.trim(),
         fromEmail: document.getElementById("fromEmail").value.trim(),
         subject: document.getElementById("subject").value.trim(),
-        mode: document.getElementById("mode").value,
-        file: document.getElementById("template").files[0]
+        file: document.getElementById("template").files[0],
       };
     }
 
-    function renderResults(results, subject) {
-      bodyEl.innerHTML = "";
-      tableEl.style.display = "table";
+    function badge(v) {
+      return v ? `<span class="ok">1</span>` : `<span class="bad">0</span>`;
+    }
 
-      for (const r of results) {
+    async function loadStatus() {
+      summaryEl.textContent = "Loading…";
+      dbTable.style.display = "none";
+      dbBody.innerHTML = "";
+
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      if (!res.ok) {
+        summaryEl.textContent = "❌ " + (data.error || "Failed");
+        return;
+      }
+
+      const rows = data.rows || [];
+      const sent = rows.filter(r => Number(r.is_sent) === 1).length;
+      const read = rows.filter(r => Number(r.is_read) === 1).length;
+      const valid = rows.filter(r => Number(r.is_valid) === 1).length;
+
+      summaryEl.textContent = `Rows: ${rows.length} | Valid: ${valid} | Sent: ${sent} | Read: ${read}`;
+
+      dbTable.style.display = "table";
+
+      for (const r of rows) {
         const tr = document.createElement("tr");
 
         const tdEmail = document.createElement("td");
-        tdEmail.textContent = r.to;
+        tdEmail.textContent = r.email;
 
-        const tdStatus = document.createElement("td");
-        tdStatus.innerHTML = r.ok
-          ? `<span class="ok">SENT</span>`
-          : `<span class="bad">FAILED</span>` + (r.error ? ` — ${r.error}` : "");
+        const tdValid = document.createElement("td");
+        tdValid.innerHTML = badge(Number(r.is_valid) === 1);
+
+        const tdSent = document.createElement("td");
+        tdSent.innerHTML = badge(Number(r.is_sent) === 1);
+
+        const tdRead = document.createElement("td");
+        tdRead.innerHTML = badge(Number(r.is_read) === 1);
 
         const tdAction = document.createElement("td");
-
-        if (r.ok) {
+        if (Number(r.is_sent) === 1) {
           tdAction.textContent = "-";
         } else {
           const btn = document.createElement("button");
           btn.className = "btnSmall";
           btn.textContent = "Resend";
-          btn.onclick = () => resendOne(r.to, subject, tr);
+          btn.onclick = () => resend(r.email, tr);
           tdAction.appendChild(btn);
         }
 
         tr.appendChild(tdEmail);
-        tr.appendChild(tdStatus);
+        tr.appendChild(tdValid);
+        tr.appendChild(tdSent);
+        tr.appendChild(tdRead);
         tr.appendChild(tdAction);
 
-        bodyEl.appendChild(tr);
+        dbBody.appendChild(tr);
       }
-
-      const sentCount = results.filter(x => x.ok).length;
-      summaryEl.textContent = `Sent: ${sentCount}/${results.length}`;
     }
 
-    async function resendOne(to, subject, rowEl) {
-      const { fromName, fromEmail, file } = getFormValues();
+    async function resend(email, rowEl) {
+      const { fromName, fromEmail, subject, file } = vals();
 
-      if (!file) {
-        alert("Please select the same HTML file again before resending.");
-        return;
-      }
+      if (!subject) { alert("Subject required"); return; }
+      if (!file) { alert("Please select the same HTML file to resend."); return; }
 
-      const statusCell = rowEl.children[1];
-      const actionCell = rowEl.children[2];
+      const sentCell = rowEl.children[2];
+      const actionCell = rowEl.children[4];
 
-      statusCell.innerHTML = "Resending...";
+      sentCell.innerHTML = "Resending...";
       actionCell.innerHTML = "";
 
       const form = new FormData();
-      form.append("to", to);
+      form.append("to", email);
       form.append("subject", subject);
       form.append("fromName", fromName);
       form.append("fromEmail", fromEmail);
       form.append("template", file);
 
       try {
-        const res = await fetch("/api/send-one", {
-          method: "POST",
-          body: form
-        });
-
+        const res = await fetch("/api/send-one", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Resend failed");
 
-        statusCell.innerHTML = `<span class="ok">SENT</span>`;
-        actionCell.textContent = "-";
+        await loadStatus();
       } catch (e) {
-        statusCell.innerHTML = `<span class="bad">FAILED</span> — ${e.message}`;
-
+        sentCell.innerHTML = `<span class="bad">0</span>`;
         const btn = document.createElement("button");
         btn.className = "btnSmall";
         btn.textContent = "Resend";
-        btn.onclick = () => resendOne(to, subject, rowEl);
-
+        btn.onclick = () => resend(email, rowEl);
         actionCell.appendChild(btn);
+        alert("Resend failed: " + e.message);
       }
     }
 
+    document.getElementById("refreshBtn").onclick = loadStatus;
+
     document.getElementById("sendBtn").onclick = async () => {
-      const { fromName, fromEmail, subject, mode, file } = getFormValues();
+      const { fromName, fromEmail, subject, file } = vals();
 
-      if (!fromName) {
-        statusEl.textContent = "❌ From Name required.";
-        return;
-      }
-
-      if (!fromEmail) {
-        statusEl.textContent = "❌ From Email required.";
-        return;
-      }
-
-      if (!subject) {
-        statusEl.textContent = "❌ Subject required.";
-        return;
-      }
-
-      if (!file) {
-        statusEl.textContent = "❌ Please choose an HTML file.";
-        return;
-      }
+      if (!fromName) { statusEl.textContent = "❌ From Name required."; return; }
+      if (!fromEmail) { statusEl.textContent = "❌ From Email required."; return; }
+      if (!subject) { statusEl.textContent = "❌ Subject required."; return; }
+      if (!file) { statusEl.textContent = "❌ Please choose an HTML file."; return; }
 
       const form = new FormData();
       form.append("fromName", fromName);
       form.append("fromEmail", fromEmail);
       form.append("subject", subject);
-      form.append("mode", mode);
       form.append("template", file);
 
-      statusEl.textContent = "Sending...";
-      summaryEl.textContent = "Waiting for results...";
-      tableEl.style.display = "none";
-      bodyEl.innerHTML = "";
-
+      statusEl.textContent = "Sending to all...";
       try {
-        const res = await fetch("/api/send", {
-          method: "POST",
-          body: form
-        });
-
+        const res = await fetch("/api/send", { method: "POST", body: form });
         const data = await res.json();
 
         if (!res.ok) {
           statusEl.textContent = "❌ " + (data.error || "Send failed");
           if (data.details) statusEl.textContent += "\n" + data.details;
-          summaryEl.textContent = "No results.";
           return;
         }
 
-        statusEl.textContent = "✅ Send finished.";
-
-        if (data.mode === "bcc") {
-          summaryEl.textContent =
-            `BCC sent to ${data.accepted} recipients.\n(No per-user status available in BCC mode)`;
-          tableEl.style.display = "none";
-          return;
-        }
-
-        renderResults(data.results || [], subject);
-
+        statusEl.textContent = `✅ Finished. Sent ${data.sent}/${data.total}.`;
+        await loadStatus();
       } catch (e) {
         statusEl.textContent = "❌ Request failed: " + e.message;
-        summaryEl.textContent = "No results.";
       }
     };
+
+    loadStatus();
   </script>
 </body>
 </html>

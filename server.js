@@ -25,18 +25,50 @@ app.use(express.static(path.join(__dirname, "public")));
 const sqlitePath = process.env.SQLITE_PATH || "./db.sqlite";
 const db = new sqlite3.Database(path.resolve(__dirname, sqlitePath));
 
-// ---- helpers ----
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-function uniqCid() {
-  return crypto.randomBytes(10).toString("hex") + "@inline";
-}
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, ""); // for tracking pixel
+
+console.log("public base URL:", PUBLIC_BASE_URL);
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, change if needed
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function newReadToken() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function injectTrackingPixel(html, token) {
+  if (!PUBLIC_BASE_URL) return html; // skip if not configured
+  const pixel = `<img src="${PUBLIC_BASE_URL}/t/${token}.png" width="1" height="1" style="display:none" alt="" />`;
+  if (html.includes("</body>")) return html.replace("</body>", `${pixel}</body>`);
+  return html + pixel;
+}
+
+// "valid" in practice:
+// - 1 if syntax OK
+// - 0 if syntax invalid OR server returned a hard-bounce-like error
+function looksLikeInvalidRecipient(err) {
+  const msg = String(err?.message || "");
+  const resp = String(err?.response || "");
+  const code = String(err?.responseCode || "");
+  const hay = (msg + " " + resp + " " + code).toLowerCase();
+
+  return (
+    hay.includes("5.1.1") ||
+    hay.includes("user unknown") ||
+    hay.includes("no such user") ||
+    hay.includes("recipient address rejected") ||
+    hay.includes("mailbox unavailable") ||
+    hay.includes("550")
+  );
+}
 
 
 // ---- Nodemailer transporter (your email will send) ----
@@ -61,119 +93,171 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 // ---- IMPORTANT: pick the right column from your table `email` ----
 // If your table is like: CREATE TABLE email (email TEXT);
 // then this query is correct.
 const RECIPIENTS_QUERY = `
-  SELECT
-    email as addr
+  SELECT id, email as addr
   FROM test_emails
 `;
 // If your column is named differently, change above, e.g.
 // SELECT address as addr FROM email
 // SELECT mail as addr FROM email
 
-// List recipients (optional endpoint for UI)
-app.get("/api/recipients", (req, res) => {
-  db.all(RECIPIENTS_QUERY, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });
+// ---------- TRACKING ENDPOINT ----------
+app.get("/t/:token.png", (req, res) => {
+  const token = String(req.params.token || "").replace(".png", "").trim();
+  if (!token) return res.status(400).end();
 
-    const recipients = Array.from(
-      new Set((rows || []).map(r => String(r.addr || "").trim()).filter(isValidEmail))
-    );
+  console.log(`Tracking pixel hit for token: ${token}`);
 
-    res.json({ ok: true, recipients });
-  });
+  db.run(
+    `UPDATE test_emails
+     SET is_read = 1,
+         last_read_at = datetime('now')
+     WHERE read_token = ?`,
+    [token],
+    () => {
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6X9l3cAAAAASUVORK5CYII=",
+        "base64"
+      );
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.end(png);
+    }
+  );
 });
 
-// Send email to everyone in table `email`
+// ---------- STATUS LIST ----------
+app.get("/api/status", (req, res) => {
+  db.all(
+    `SELECT id, email, is_read, is_sent, is_valid
+     FROM test_emails
+     ORDER BY id DESC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("DB read error:", err);
+        return res.status(500).json({ error: "DB read failed.", details: String(err) });
+      }
+      res.json({ ok: true, rows });
+    }
+  );
+});
+
+// ---------- SEND (INDIVIDUAL ONLY, HTML UPLOAD) ----------
 app.post("/api/send", upload.single("template"), async (req, res) => {
   try {
     const subject = String(req.body.subject || "").trim();
-    const mode = req.body.mode === "bcc" ? "bcc" : "individual";
+
+    // Allow UI override of From display name/email (Gmail may enforce SMTP_USER)
+    const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
+    const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
 
     if (!subject) return res.status(400).json({ error: "Subject is required." });
+    if (!fromEmail || !isValidEmail(fromEmail)) return res.status(400).json({ error: "Valid From Email is required." });
     if (!req.file) return res.status(400).json({ error: "HTML file is required (field name: template)." });
 
-    // Read uploaded HTML file content
     const rawHtml = req.file.buffer.toString("utf-8");
     if (!rawHtml || rawHtml.trim().length < 20) {
       return res.status(400).json({ error: "HTML file looks empty." });
     }
 
-    // Load recipients from DB
+    const from = `"${fromName}" <${fromEmail}>`;
+
     db.all(RECIPIENTS_QUERY, [], async (err, rows) => {
       if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });
 
-      const recipients = Array.from(
-        new Set((rows || []).map(r => String(r.addr || "").trim()).filter(isValidEmail))
-      );
-
-      if (recipients.length === 0) {
-        return res.status(400).json({ error: "No valid emails found in database." });
-      }
-
-      const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
-      const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
-
-      if (!fromEmail || !isValidEmail(fromEmail)) {
-        return res.status(400).json({ error: "Valid fromEmail is required." });
-      }
-
-      const from = `"${fromName}" <${fromEmail}>`;
-
-      if (mode === "bcc") {
-        const info = await transporter.sendMail({
-          from,
-          to: from,
-          bcc: recipients,
-          subject,
-          rawHtml,
-        });
-
-        return res.json({
-          ok: true,
-          mode: "bcc",
-          accepted: recipients.length,
-          messageId: info.messageId,
-        });
-      }
-
-      // Individual mode (recommended)
       const results = [];
-      for (const to of recipients) {
+
+      for (const row of rows || []) {
+        const id = row.id;
+        const to = String(row.addr || "").trim();
+
+        // compute initial validity by syntax
+        const validSyntax = isValidEmail(to) ? 1 : 0;
+
+        // new tracking token + reset statuses for this campaign
+        const token = newReadToken();
+
+        await new Promise((resolve) => {
+          db.run(
+            `UPDATE test_emails
+             SET is_valid = ?,
+                 is_sent = 0,
+                 is_read = 0,
+                 read_token = ?,
+                 last_sent_at = datetime('now')
+             WHERE id = ?`,
+            [validSyntax, token, id],
+            () => resolve()
+          );
+        });
+
+        if (!validSyntax) {
+          results.push({ id, to, ok: false, error: "invalid email format" });
+          continue;
+        }
+
+        // inject tracking pixel
+        const htmlWithPixel = injectTrackingPixel(rawHtml, token);
+
         try {
           const info = await transporter.sendMail({
             from,
-            to: from,
+            to,
             subject,
-            rawHtml,
+            html: htmlWithPixel,
           });
-          await sleep(2000);
-          results.push({ to, ok: true, messageId: info.messageId });
+
+          await new Promise((resolve) => {
+            db.run(`UPDATE test_emails SET is_sent = 1 WHERE id = ?`, [id], () => resolve());
+          });
+
+          results.push({ id, to, ok: true, messageId: info.messageId });
         } catch (e) {
-          results.push({ to, ok: false, error: String(e?.message || "send failed") });
+          const invalid = looksLikeInvalidRecipient(e) ? 0 : 1;
+
+          await new Promise((resolve) => {
+            db.run(
+              `UPDATE test_emails
+               SET is_sent = 0,
+                   is_valid = ?
+               WHERE id = ?`,
+              [invalid, id],
+              () => resolve()
+            );
+          });
+
+          results.push({ id, to, ok: false, error: String(e?.message || "send failed") });
         }
+
+        // throttle to reduce resets/rate limits
+        await sleep(2000);
       }
 
       const sent = results.filter(r => r.ok).length;
-      return res.json({ ok: true, mode: "individual", total: recipients.length, sent, results });
+      return res.json({ ok: true, total: results.length, sent, results });
     });
   } catch (e) {
-    return res.status(500).json({ error: "Send failed.", details: String(e) });
+    return res.status(500).json({ error: "Send failed.", details: String(e?.message || e) });
   }
 });
 
+// ---------- SEND ONE (RESEND) ----------
 app.post("/api/send-one", upload.single("template"), async (req, res) => {
   try {
     const to = String(req.body.to || "").trim();
     const subject = String(req.body.subject || "").trim();
 
+    const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
+    const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
+
     if (!to) return res.status(400).json({ error: "Recipient (to) is required." });
     if (!isValidEmail(to)) return res.status(400).json({ error: "Invalid recipient email." });
     if (!subject) return res.status(400).json({ error: "Subject is required." });
+    if (!fromEmail || !isValidEmail(fromEmail)) return res.status(400).json({ error: "Valid From Email is required." });
     if (!req.file) return res.status(400).json({ error: "HTML file is required (field name: template)." });
 
     const rawHtml = req.file.buffer.toString("utf-8");
@@ -181,24 +265,45 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
       return res.status(400).json({ error: "HTML file looks empty." });
     }
 
-    const fromName = String(req.body.fromName || process.env.FROM_NAME || "Mailer").trim();
-    const fromEmail = String(req.body.fromEmail || process.env.SMTP_USER || "").trim();
+    // find row by email to update statuses
+    db.get(`SELECT id FROM test_emails WHERE email = ?`, [to], async (err, row) => {
+      const id = row?.id;
 
-    if (!fromEmail || !isValidEmail(fromEmail)) {
-      return res.status(400).json({ error: "Valid fromEmail is required." });
-    }
+      const token = newReadToken();
+      const htmlWithPixel = injectTrackingPixel(rawHtml, token);
 
-    const from = `"${fromName}" <${fromEmail}>`;
+      // update reset statuses (if row exists)
+      if (id) {
+        db.run(
+          `UPDATE test_emails
+           SET is_valid = 1,
+               is_sent = 0,
+               is_read = 0,
+               read_token = ?,
+               last_sent_at = datetime('now')
+           WHERE id = ?`,
+          [token, id]
+        );
+      }
 
-    const info = await transporter.sendMail({
-      from,
-      to: fromEmail,
-      subject,
-      rawHtml,
-      attachments: converted.attachments,
+      const from = `"${fromName}" <${fromEmail}>`;
+
+      try {
+        const info = await transporter.sendMail({
+          from,
+          to,
+          subject,
+          html: htmlWithPixel,
+        });
+
+        if (id) db.run(`UPDATE test_emails SET is_sent = 1 WHERE id = ?`, [id]);
+        return res.json({ ok: true, to, messageId: info.messageId });
+      } catch (e) {
+        const invalid = looksLikeInvalidRecipient(e) ? 0 : 1;
+        if (id) db.run(`UPDATE test_emails SET is_sent = 0, is_valid = ? WHERE id = ?`, [invalid, id]);
+        return res.status(500).json({ ok: false, error: "Send-one failed.", details: String(e?.message || e) });
+      }
     });
-
-    return res.json({ ok: true, to, messageId: info.messageId });
   } catch (e) {
     return res.status(500).json({ ok: false, error: "Send-one failed.", details: String(e?.message || e) });
   }
@@ -207,3 +312,4 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running: http://localhost:${port}`));
+
