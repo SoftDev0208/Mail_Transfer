@@ -86,8 +86,8 @@ function looksLikeInvalidRecipient(err) {
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'kamosmbatyan0729@gmail.com',       // Replace with your Gmail
-    pass: 'pdpi rhuc clzl qcxg',         // Use App Password if 2FA enabled
+    user: process.env.SMTP_USER,       // Replace with your Gmail
+    pass: process.env.SMTP_PASS,         // Use App Password if 2FA enabled
   },
   tls: {
     rejectUnauthorized: false // allows self-signed certs
