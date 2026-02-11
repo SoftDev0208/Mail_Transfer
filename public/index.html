@@ -1,28 +1,117 @@
 <!doctype html>
 <html>
+
 <head>
   <meta charset="utf-8" />
   <title>Bulk Email Sender</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: system-ui; max-width: 1100px; margin: 30px auto; padding: 0 16px; }
-    .row { display:grid; grid-template-columns: 1fr 1.4fr; gap: 18px; align-items:start; }
-    .card { border:1px solid #ddd; border-radius:12px; padding:16px; background:#fff; }
-    input, button { width:100%; padding:10px; margin:8px 0; font-size:16px; border-radius:8px; border:1px solid #ddd; }
-    button { cursor:pointer; background:#2563eb; color:#fff; font-weight:700; border:none; }
-    button:hover { opacity:0.9; }
-    .btnSmall { width:auto; padding:6px 10px; font-size:14px; border-radius:6px; background:#111827; }
-    .btnSmall:hover { opacity:0.85; }
-    .status { white-space:pre-wrap; padding:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; }
-    table { width:100%; border-collapse:collapse; margin-top:12px; }
-    th, td { border:1px solid #ddd; padding:10px; text-align:left; font-size:14px; }
-    th { background:#f1f5f9; }
-    .ok { color:green; font-weight:800; }
-    .bad { color:#b00020; font-weight:800; }
-    .muted { color:#64748b; font-size:13px; margin-top:-4px; }
-    label { font-weight:700; display:block; margin-top:6px; }
+    body {
+      font-family: system-ui;
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 0 16px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      background: #fff;
+    }
+
+    input,
+    button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+
+    button {
+      cursor: pointer;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .btnSmall {
+      width: auto;
+      padding: 6px 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background: #111827;
+    }
+
+    .btnSmall:hover {
+      opacity: 0.85;
+    }
+
+    .status {
+      white-space: pre-wrap;
+      padding: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f1f5f9;
+    }
+
+    .ok {
+      color: green;
+      font-weight: 800;
+    }
+
+    .bad {
+      color: #b00020;
+      font-weight: 800;
+    }
+
+    .muted {
+      color: #64748b;
+      font-size: 13px;
+      margin-top: -4px;
+    }
+
+    label {
+      font-weight: 700;
+      display: block;
+      margin-top: 6px;
+    }
   </style>
 </head>
+
 <body>
   <h1>📨 Bulk Email Sender (HTML Upload + DB Status)</h1>
 
@@ -32,7 +121,7 @@
       <input id="fromName" placeholder="ZAMA Support" value="ZAMA Support" />
 
       <label>From Email</label>
-      <input id="fromEmail" type="email" placeholder="your@gmail.com" />
+      <input id="fromEmail" type="email" placeholder="stmp@gmail.com" />
       <div class="muted">Tip: For Gmail, From Email should match SMTP_USER.</div>
 
       <label>Subject</label>
@@ -46,7 +135,7 @@
       <div class="status" id="status">Ready.</div>
     </div>
 
-    <div class="card">
+    <div class="card" style="width: 100%;">
       <div style="display:flex; gap:10px; align-items:center; justify-content:space-between;">
         <h3 style="margin:0;">📌 Database Status</h3>
         <button class="btnSmall" id="refreshBtn">Refresh</button>
@@ -54,18 +143,22 @@
 
       <div class="status" id="summary">Loading…</div>
 
-      <table id="dbTable" style="display:none;">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Valid</th>
-            <th>Sent</th>
-            <th>Read</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="dbBody"></tbody>
-      </table>
+      <div style="max-height: 450px; overflow-y: auto; border:1px solid #ddd; border-radius:10px;">
+        <table id="dbTable" style="width:100%; border-collapse:collapse;">
+          <thead style="position: sticky; top: 0; background:#f1f5f9; z-index: 2;">
+            <tr>
+              <th>Email</th>
+              <th>Valid</th>
+              <th>Sent</th>
+              <th>Read</th>
+              <th>IP</th>
+              <th>Agent</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="dbBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -74,6 +167,9 @@
     const summaryEl = document.getElementById("summary");
     const dbTable = document.getElementById("dbTable");
     const dbBody = document.getElementById("dbBody");
+    const sendBtn = document.getElementById("sendBtn");
+
+    let isSending = false;
 
     function vals() {
       return {
@@ -89,12 +185,9 @@
     }
 
     async function loadStatus() {
-      summaryEl.textContent = "Loading…";
-      dbTable.style.display = "none";
-      dbBody.innerHTML = "";
-
-      const res = await fetch("/api/status");
+      const res = await fetch("/api/status", { cache: "no-store" });
       const data = await res.json();
+
       if (!res.ok) {
         summaryEl.textContent = "❌ " + (data.error || "Failed");
         return;
@@ -105,9 +198,12 @@
       const read = rows.filter(r => Number(r.is_read) === 1).length;
       const valid = rows.filter(r => Number(r.is_valid) === 1).length;
 
+      // update summary only (not whole page)
       summaryEl.textContent = `Rows: ${rows.length} | Valid: ${valid} | Sent: ${sent} | Read: ${read}`;
 
+      // refresh ONLY the table body
       dbTable.style.display = "table";
+      dbBody.innerHTML = "";
 
       for (const r of rows) {
         const tr = document.createElement("tr");
@@ -124,6 +220,13 @@
         const tdRead = document.createElement("td");
         tdRead.innerHTML = badge(Number(r.is_read) === 1);
 
+        const tdIp = document.createElement("td");
+        tdIp.textContent = r.ip || "-";
+
+        const tdAgent = document.createElement("td");
+        tdAgent.textContent = r.agent ? String(r.agent).slice(0, 60) + (String(r.agent).length > 60 ? "..." : "") : "-";
+        tdAgent.title = r.agent || "";
+
         const tdAction = document.createElement("td");
         if (Number(r.is_sent) === 1) {
           tdAction.textContent = "-";
@@ -139,6 +242,8 @@
         tr.appendChild(tdValid);
         tr.appendChild(tdSent);
         tr.appendChild(tdRead);
+        tr.appendChild(tdIp);
+        tr.appendChild(tdAgent);
         tr.appendChild(tdAction);
 
         dbBody.appendChild(tr);
@@ -152,7 +257,7 @@
       if (!file) { alert("Please select the same HTML file to resend."); return; }
 
       const sentCell = rowEl.children[2];
-      const actionCell = rowEl.children[4];
+      const actionCell = rowEl.children[6];
 
       sentCell.innerHTML = "Resending...";
       actionCell.innerHTML = "";
@@ -181,9 +286,14 @@
       }
     }
 
-    document.getElementById("refreshBtn").onclick = loadStatus;
+    document.getElementById("refreshBtn").onclick = () => loadStatus();
 
-    document.getElementById("sendBtn").onclick = async () => {
+    // Auto refresh every 5 seconds (skip while sending)
+    setInterval(() => {
+      if (!isSending) loadStatus().catch(() => { });
+    }, 5000);
+
+    sendBtn.onclick = async () => {
       const { fromName, fromEmail, subject, file } = vals();
 
       if (!fromName) { statusEl.textContent = "❌ From Name required."; return; }
@@ -197,7 +307,13 @@
       form.append("subject", subject);
       form.append("template", file);
 
+      isSending = true;
+      sendBtn.disabled = true;
+      sendBtn.style.opacity = "0.6";
+      sendBtn.textContent = "Sending...";
+
       statusEl.textContent = "Sending to all...";
+
       try {
         const res = await fetch("/api/send", { method: "POST", body: form });
         const data = await res.json();
@@ -212,10 +328,16 @@
         await loadStatus();
       } catch (e) {
         statusEl.textContent = "❌ Request failed: " + e.message;
+      } finally {
+        isSending = false;
+        sendBtn.disabled = false;
+        sendBtn.style.opacity = "1";
+        sendBtn.textContent = "Send to all (individual)";
       }
     };
 
     loadStatus();
   </script>
 </body>
+
 </html>

@@ -48,6 +48,7 @@ function injectTrackingPixel(html, token) {
   if (!PUBLIC_BASE_URL) return html; // skip if not configured
   const pixel = `<img src="${PUBLIC_BASE_URL}/t/${token}.png" width="1" height="1" style="display:none" alt="" />`;
   if (html.includes("</body>")) return html.replace("</body>", `${pixel}</body>`);
+
   return html + pixel;
 }
 
@@ -109,14 +110,22 @@ app.get("/t/:token.png", (req, res) => {
   const token = String(req.params.token || "").replace(".png", "").trim();
   if (!token) return res.status(400).end();
 
-  console.log(`Tracking pixel hit for token: ${token}`);
+  const ip =
+    (req.headers["cf-connecting-ip"] ||
+      req.headers["x-forwarded-for"] ||
+      req.socket.remoteAddress ||
+      "").toString().split(",")[0].trim();
+
+  const agent = String(req.headers["user-agent"] || "").slice(0, 300);
 
   db.run(
     `UPDATE test_emails
      SET is_read = 1,
-         last_read_at = datetime('now')
+         last_read_at = datetime('now'),
+         ip = ?,
+         agent = ?
      WHERE read_token = ?`,
-    [token],
+    [ip, agent, token],
     () => {
       const png = Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/6X9l3cAAAAASUVORK5CYII=",
@@ -132,7 +141,7 @@ app.get("/t/:token.png", (req, res) => {
 // ---------- STATUS LIST ----------
 app.get("/api/status", (req, res) => {
   db.all(
-    `SELECT id, email, is_read, is_sent, is_valid
+    `SELECT id, email, is_valid, is_sent, is_read, ip, agent
      FROM test_emails
      ORDER BY id DESC`,
     [],
@@ -271,6 +280,8 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
 
       const token = newReadToken();
       const htmlWithPixel = injectTrackingPixel(rawHtml, token);
+
+      console.log('htmlWithPixel:', htmlWithPixel);
 
       // update reset statuses (if row exists)
       if (id) {
