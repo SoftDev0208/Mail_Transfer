@@ -4,10 +4,8 @@ import nodemailer from "nodemailer";
 import sqlite3 from "sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
-import { JSDOM } from "jsdom";
 import crypto from "crypto";
 import multer from "multer";
-import { ok } from "assert";
 
 dotenv.config();
 
@@ -72,26 +70,11 @@ function looksLikeInvalidRecipient(err) {
 }
 
 
-// ---- Nodemailer transporter (your email will send) ----
-// const transporter = nodemailer.createTransport({
-//     host: process.env.SMTP_HOST,
-//     port: Number(process.env.SMTP_PORT),
-//     secure: process.env.SMTP_SECURE === "true",
-//     auth: {
-//         user: process.env.SMTP_USER,
-//         pass: process.env.SMTP_PASS,
-//     },
-// });
-
+//---- Nodemailer transporter (your email will send) ----
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.SMTP_USER,       // Replace with your Gmail
-    pass: process.env.SMTP_PASS,         // Use App Password if 2FA enabled
-  },
-  tls: {
-    rejectUnauthorized: false // allows self-signed certs
-  }
+  sendmail: true,
+  newline: "unix",
+  path: "/usr/sbin/sendmail", // usually this path on Ubuntu
 });
 
 // ---- IMPORTANT: pick the right column from your table `email` ----
@@ -173,7 +156,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
       return res.status(400).json({ error: "HTML file looks empty." });
     }
 
-    const from = `"${fromName}" <${fromEmail}>`;
+    const from = `"${fromName}" <no-reply@zama-lab.com>`;
 
     db.all(RECIPIENTS_QUERY, [], async (err, rows) => {
       if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });

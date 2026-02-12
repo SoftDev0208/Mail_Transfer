@@ -43,9 +43,9 @@ out/
 .vercel/
 
 # ===== Environment files (DO NOT COMMIT) =====
-.env
-.env.*
-!.env.example
+# .env
+# .env.*
+# !.env.example
 
 # ===== Prisma =====
 # (Prisma generates client inside node_modules - already ignored)
