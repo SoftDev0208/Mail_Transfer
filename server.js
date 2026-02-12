@@ -264,8 +264,6 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
       const token = newReadToken();
       const htmlWithPixel = injectTrackingPixel(rawHtml, token);
 
-      console.log('htmlWithPixel:', htmlWithPixel);
-
       // update reset statuses (if row exists)
       if (id) {
         db.run(
