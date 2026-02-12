@@ -82,7 +82,7 @@ const transporter = nodemailer.createTransport({
 // then this query is correct.
 const RECIPIENTS_QUERY = `
   SELECT id, email as addr
-  FROM emails
+  FROM test_emails
 `;
 // If your column is named differently, change above, e.g.
 // SELECT address as addr FROM email
@@ -102,7 +102,7 @@ app.get("/t/:token.png", (req, res) => {
   const agent = String(req.headers["user-agent"] || "").slice(0, 300);
 
   db.run(
-    `UPDATE emails
+    `UPDATE test_emails
      SET is_read = 1,
          last_read_at = datetime('now'),
          ip = ?,
@@ -125,7 +125,7 @@ app.get("/t/:token.png", (req, res) => {
 app.get("/api/status", (req, res) => {
   db.all(
     `SELECT id, email, is_valid, is_sent, is_read, ip, agent
-     FROM emails
+     FROM test_emails
      ORDER BY id DESC`,
     [],
     (err, rows) => {
@@ -175,7 +175,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
 
         await new Promise((resolve) => {
           db.run(
-            `UPDATE emails
+            `UPDATE test_emails
              SET is_valid = ?,
                  is_sent = 0,
                  is_read = 0,
@@ -204,7 +204,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
           });
 
           await new Promise((resolve) => {
-            db.run(`UPDATE emails SET is_sent = 1 WHERE id = ?`, [id], () => resolve());
+            db.run(`UPDATE test_emails SET is_sent = 1 WHERE id = ?`, [id], () => resolve());
           });
 
           results.push({ id, to, ok: true, messageId: info.messageId });
@@ -213,7 +213,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
 
           await new Promise((resolve) => {
             db.run(
-              `UPDATE emails
+              `UPDATE test_emails
                SET is_sent = 0,
                    is_valid = ?
                WHERE id = ?`,
@@ -258,7 +258,7 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
     }
 
     // find row by email to update statuses
-    db.get(`SELECT id FROM emails WHERE email = ?`, [to], async (err, row) => {
+    db.get(`SELECT id FROM test_emails WHERE email = ?`, [to], async (err, row) => {
       const id = row?.id;
 
       const token = newReadToken();
@@ -269,7 +269,7 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
       // update reset statuses (if row exists)
       if (id) {
         db.run(
-          `UPDATE emails
+          `UPDATE test_emails
            SET is_valid = 1,
                is_sent = 0,
                is_read = 0,
@@ -290,11 +290,11 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
           html: htmlWithPixel,
         });
 
-        if (id) db.run(`UPDATE emails SET is_sent = 1 WHERE id = ?`, [id]);
+        if (id) db.run(`UPDATE test_emails SET is_sent = 1 WHERE id = ?`, [id]);
         return res.json({ ok: true, to, messageId: info.messageId });
       } catch (e) {
         const invalid = looksLikeInvalidRecipient(e) ? 0 : 1;
-        if (id) db.run(`UPDATE emails SET is_sent = 0, is_valid = ? WHERE id = ?`, [invalid, id]);
+        if (id) db.run(`UPDATE test_emails SET is_sent = 0, is_valid = ? WHERE id = ?`, [invalid, id]);
         return res.status(500).json({ ok: false, error: "Send-one failed.", details: String(e?.message || e) });
       }
     });
