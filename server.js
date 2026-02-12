@@ -156,7 +156,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
       return res.status(400).json({ error: "HTML file looks empty." });
     }
 
-    const from = `"${fromName}" <no-reply@zama-lab.com>`;
+    const from = `"${fromName}" <${fromEmail}>`;
 
     db.all(RECIPIENTS_QUERY, [], async (err, rows) => {
       if (err) return res.status(500).json({ error: "DB read failed.", details: String(err) });
