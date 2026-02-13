@@ -196,12 +196,23 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
         // inject tracking pixel
         const htmlWithPixel = injectTrackingPixel(rawHtml, token);
 
+        const message = `
+          Hello,
+
+          This is a test email from our system.
+
+          If you received this, everything works.
+
+          Regards,
+          ZAMA Support
+          `;
+
         try {
           const info = await transporter.sendMail({
             from,
             to,
             subject,
-            html: htmlWithPixel,
+            text: message, //html: htmlWithPixel,
           });
 
           await new Promise((resolve) => {
@@ -282,11 +293,22 @@ app.post("/api/send-one", upload.single("template"), async (req, res) => {
       const from = `"${fromName}" <${fromEmail}>`;
 
       try {
+        const message = `
+          Hello,
+
+          This is a test email from our system.
+
+          If you received this, everything works.
+
+          Regards,
+          ZAMA Support
+          `;
+
         const info = await transporter.sendMail({
           from,
           to,
           subject,
-          html: htmlWithPixel,
+          text: message, //html: htmlWithPixel,
         });
 
         if (id) db.run(`UPDATE test_emails SET is_sent = 1 WHERE id = ?`, [id]);
