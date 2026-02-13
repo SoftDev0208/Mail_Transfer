@@ -124,6 +124,7 @@ app.get("/t/:token.png", (req, res) => {
 
 // ---------- STATUS LIST ----------
 app.get("/api/status", (req, res) => {
+  console.log("Fetching status...");
   db.all(
     `SELECT id, email, is_valid, is_sent, is_read, ip, agent
      FROM test_emails
@@ -134,6 +135,7 @@ app.get("/api/status", (req, res) => {
         console.error("DB read error:", err);
         return res.status(500).json({ error: "DB read failed.", details: String(err) });
       }
+      console.log("rows : ============", rows);
       res.json({ ok: true, rows });
     }
   );
