@@ -185,7 +185,7 @@
     }
 
     async function loadStatus() {
-      const res = await fetch("/api/status", { cache: "no-store" });
+      const res = await fetch("/sender/api/status", { cache: "no-store" });
       const data = await res.json();
 
       if (!res.ok) {
@@ -270,7 +270,7 @@
       form.append("template", file);
 
       try {
-        const res = await fetch("/api/send-one", { method: "POST", body: form });
+        const res = await fetch("/sender/api/send-one", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Resend failed");
 
@@ -315,7 +315,7 @@
       statusEl.textContent = "Sending to all...";
 
       try {
-        const res = await fetch("/api/send", { method: "POST", body: form });
+        const res = await fetch("/sender/api/send", { method: "POST", body: form });
         const data = await res.json();
 
         if (!res.ok) {
