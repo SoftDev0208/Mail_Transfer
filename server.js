@@ -21,6 +21,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // ---- SQLite: open your existing DB file ----
 const sqlitePath = process.env.SQLITE_PATH || "./db.sqlite";
+console.log("Using DB file:", path.resolve(__dirname, sqlitePath));
 const db = new sqlite3.Database(path.resolve(__dirname, sqlitePath));
 
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, ""); // for tracking pixel
