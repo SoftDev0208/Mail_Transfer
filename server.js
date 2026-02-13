@@ -90,7 +90,7 @@ const RECIPIENTS_QUERY = `
 // SELECT mail as addr FROM email
 
 // ---------- TRACKING ENDPOINT ----------
-app.get("/t/:token.png", (req, res) => {
+app.get("/sender/t/:token.png", (req, res) => {
   const token = String(req.params.token || "").replace(".png", "").trim();
   if (!token) return res.status(400).end();
 
@@ -123,7 +123,7 @@ app.get("/t/:token.png", (req, res) => {
 });
 
 // ---------- STATUS LIST ----------
-app.get("/api/status", (req, res) => {
+app.get("/sender/api/status", (req, res) => {
   console.log("Fetching status...");
   db.all(
     `SELECT id, email, is_valid, is_sent, is_read, ip, agent
@@ -142,7 +142,7 @@ app.get("/api/status", (req, res) => {
 });
 
 // ---------- SEND (INDIVIDUAL ONLY, HTML UPLOAD) ----------
-app.post("/api/send", upload.single("template"), async (req, res) => {
+app.post("/sender/api/send", upload.single("template"), async (req, res) => {
   try {
     const subject = String(req.body.subject || "").trim();
 
@@ -241,7 +241,7 @@ app.post("/api/send", upload.single("template"), async (req, res) => {
 });
 
 // ---------- SEND ONE (RESEND) ----------
-app.post("/api/send-one", upload.single("template"), async (req, res) => {
+app.post("/sender/api/send-one", upload.single("template"), async (req, res) => {
   try {
     const to = String(req.body.to || "").trim();
     const subject = String(req.body.subject || "").trim();
